@@ -163,8 +163,8 @@ class onecard(Frame):
                     cloverButton.grid(row=1, column=1)
                     heartButton.grid(row=2, column=0)
                     diamondButton.grid(row=2, column=1)
-                    return True
-        return False
+                    return 
+        self.nextTurn()
 
 
     def onecardShout(self):
@@ -205,6 +205,11 @@ class onecard(Frame):
             self.want = None
             self.shapetext.set('                ')
 
+        if not player.is_computer:
+            for button in self.deckbutton:
+                self.deckbutton[button]["state"] = DISABLED
+            self.eatcard["state"] = DISABLED
+
         n = len(hand)
         self.decknumber[player.name].set(str(n))
         self.putcard.set(self.put[-1])
@@ -219,10 +224,8 @@ class onecard(Frame):
             self.onecardButton["state"] = NORMAL
             self.shout = self.after(min(time), self.onecard, self.people[time.index(min(time))+1])
         
-        if card != None:
-            if self.KQJ7(card, player): return 
-
-        self.nextTurn()
+        if card != None: self.KQJ7(card, player)
+        else: self.nextTurn()
 
 
     def turn(self, player):
@@ -244,19 +247,16 @@ class onecard(Frame):
 
     def checkCard(self, card):
         if card == None or self.is_available(card):
-            for button in self.deckbutton:
-                self.deckbutton[button]["state"] = DISABLED
-            self.eatcard["state"] = DISABLED
-
             self.chiceCard(card, self.people[0])
         else:
             messagebox.showerror("Error", "낼 수 없는 카드입니다.")
 
 
     def addMydeck(self, card):
-        self.deckbutton[card] = Button(self.frame3, text=f"{card}", state="disabled", overrelief="sunken",
+        self.deckbutton[card] = Button(self.frame3, text=f"{card}", overrelief="sunken",
                                        command=lambda: self.checkCard(card))
         self.deckbutton[card].pack(side="left")
+        if self.order != 0: self.deckbutton[card]["state"] = DISABLED
 
 
     def startGame(self):
@@ -275,7 +275,7 @@ class onecard(Frame):
         frame4 = Frame(self)
         frame1.pack()
         frame2.pack()
-        self.frame3.pack(fill='x')
+        self.frame3.pack()
         frame4.pack(fill='x')
         
         self.decknumber = {person.name: StringVar() for person in self.people}
