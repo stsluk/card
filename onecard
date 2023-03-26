@@ -29,6 +29,44 @@ class onecard(Frame):
         self.player_count = 1
 
 
+    def setting(self):
+        self.setUp = Frame(self.master)
+        self.setUp.pack()
+
+        frame = Frame(self.setUp)
+        frame.pack()
+
+        nameLabel = Label(frame, text="이름:")
+        nameLabel.grid(row=1, column=0)
+        self.nameEntry = Entry(frame)
+        self.nameEntry.grid(row=1, column=1)
+
+        numComLabel = Label(frame, text="(6 이하) 컴퓨터 수:")
+        numComLabel.grid(row=2, column=0)
+        self.numComEntry = Entry(frame)
+        self.numComEntry.grid(row=2, column=1)
+
+        buttonEnter = Button(self.setUp, text="확인", command=self.numCom)
+        buttonEnter.pack()
+
+
+    def numCom(self):
+        try:
+            if not self.nameEntry.get():
+                messagebox.showerror("Error", "이름을 입력해 주세요.")
+            com_count = int(self.numComEntry.get())
+            if com_count < 1 or com_count > 6:
+                messagebox.showerror("Error", "1~6 사이의 수를 입력해주세요.")
+            else:
+                self.createPlayer(self.nameEntry.get(), com_count)
+                self.handOutCard()
+                self.setUp.destroy()
+                self.order = randrange(self.player_count)
+                self.startGame()
+        except ValueError:
+            messagebox.showerror("Error", "정수를 입력해 주세요.")
+
+
     def createPlayer(self, name, com_count):
         Person = namedtuple("Person", "name hand is_computer")
         self.people.append(Person(name, [], False))
@@ -45,8 +83,80 @@ class onecard(Frame):
                 person[1].append(self.deck.pop())
 
 
-    def is_attack_card(self, card):
-        return card[1] in {'A', '2', 'Joker'}
+    def startGame(self):
+        self.pack()
+
+        self.orderText = StringVar()
+        turnLabel = Label(self, textvariable=self.orderText, bg="green")
+        turnLabel.pack(fill='x')
+        self.alarmText = StringVar()
+        alarmText = Label(self, textvariable=self.alarmText)
+        alarmText.pack()
+
+        frame1 = Frame(self)
+        frame2 = Frame(self)
+        self.frame3 = Frame(self)
+        frame4 = Frame(self)
+        frame1.pack()
+        frame2.pack()
+        self.frame3.pack()
+        frame4.pack(fill='x')
+        
+        self.decknumber = {person.name: StringVar() for person in self.people}
+        for i, person in enumerate(self.people):
+            if i == 0: continue
+            name = Label(frame1, text=person.name)
+            self.decknumber[person.name].set(str(len(person.hand)))
+            deck = Label(frame1, textvariable=self.decknumber[person.name])
+            name.grid(row=0, column=i)
+            deck.grid(row=1, column=i)
+
+        self.putcard = StringVar()
+        self.putcard.set(self.put[-1])
+        putcardLabel = Label(frame2, textvariable=self.putcard)
+        putcardLabel.pack()
+
+        deckLabel = Label(self.frame3, text=f"{self.people[0].name}`s deck:")
+        deckLabel.pack(side="left")
+
+        self.deckbutton = {}
+        for card in self.people[0].hand:
+            self.addMydeck(card)
+        self.eatcard = Button(self.frame3, text="먹기", state="disabled", overrelief="sunken",
+                              command=lambda: self.checkCard(None))
+        self.eatcard.pack(side="right")
+
+        self.damagetext = StringVar()
+        damageLabel = Label(frame4, textvariable=self.damagetext, fg="red")
+        damageLabel.pack(side="left")
+    
+        self.shapetext = StringVar()
+        self.shapetext.set('')
+        shapeLabel = Label(frame4, textvariable=self.shapetext)
+        shapeLabel.pack(side="left")
+
+        self.onecardButton = Button(frame4, text="ONECARD!!", state="disabled", overrelief="sunken",
+                                    command=self.onecardShout)
+        self.onecardButton.pack(side="right")
+
+        self.turn(self.people[self.order])
+
+
+    def turn(self, player):
+        self.orderText.set(f"{player.name}`s turn")
+
+        if not player.is_computer:
+            for card in self.deckbutton:
+                self.deckbutton[card]["state"] = NORMAL
+            self.eatcard["state"] = NORMAL
+
+        else:
+            available = []
+            for card in player.hand:
+                if self.is_available(card):
+                    available.append(card)
+
+            self.after(randrange(1000, 4000), self.choiceCard, choice(available) if available else None, player)
 
 
     def is_available(self, card):
@@ -82,6 +192,61 @@ class onecard(Frame):
         return False
 
 
+    def checkCard(self, card):
+        if card == None or self.is_available(card):
+            self.choiceCard(card, self.people[0])
+        else:
+            messagebox.showerror("Error", "낼 수 없는 카드입니다.")
+
+
+    def choiceCard(self, card, player):
+        self.alarmText.set('')
+        hand = player.hand
+        if card == None:
+            for _ in range(self.damage):
+                if not self.draw(hand, player.is_computer):
+                    break
+            self.damage = 1
+            self.damagetext.set('')
+            self.is_attack = False
+        else:
+            self.put.append(card)
+            hand.remove(card)
+            if not player.is_computer:
+                self.deckbutton[card].destroy()
+                del self.deckbutton[card]
+
+            if self.is_attack_card(card):
+                if not self.is_attack:
+                    self.damage = self.get_damage(card)
+                    self.is_attack = True
+                else: self.damage += self.get_damage(card)
+                self.damagetext.set(f"damage: {self.damage}")
+            self.want = None
+            self.shapetext.set('')
+
+        if not player.is_computer:
+            for button in self.deckbutton:
+                self.deckbutton[button]["state"] = DISABLED
+            self.eatcard["state"] = DISABLED
+
+        n = len(hand)
+        self.decknumber[player.name].set(str(n))
+        self.putcard.set(self.put[-1])
+        if n == 0:
+            self.destroy()
+            winlabel = Label(self.master, text=f"{player.name} is winner!!!")
+            winlabel.pack()
+            return 
+        elif n == 1:
+            time = [randrange(400, 3000) for _ in range(self.player_count-1)]
+            self.one_player = player
+            self.onecardButton["state"] = NORMAL
+            self.shout = self.after(min(time), self.onecard, self.people[time.index(min(time))+1])
+        
+        self.KQJ7(card, player)
+
+
     def draw(self, hand, is_computer):
         if not self.deck:
             self.deck.append(self.put.pop())
@@ -94,6 +259,17 @@ class onecard(Frame):
         if not is_computer:
             self.addMydeck(hand[-1])
         return True
+    
+
+    def addMydeck(self, card):
+        self.deckbutton[card] = Button(self.frame3, text=f"{card}", overrelief="sunken",
+                                       command=lambda: self.checkCard(card))
+        self.deckbutton[card].pack(side="left")
+        if self.order != 0: self.deckbutton[card]["state"] = DISABLED
+
+
+    def is_attack_card(self, card):
+        return card[1] in {'A', '2', 'Joker'}
 
 
     def get_damage(self, card):
@@ -107,18 +283,6 @@ class onecard(Frame):
             damage = 2
         return damage
     
-
-    def nextTurn(self):
-        self.order %= self.player_count
-        self.turn(self.people[self.order])
-
-
-    def changeWant(self, s):
-        self.want = s
-        self.shapetext.set(f"change shape: {s}")
-        self.whatWant.destroy()
-        self.nextTurn()
-        
 
     def KQJ7(self, card, player):
         if self.clockwise == 1: self.order += 1
@@ -168,6 +332,18 @@ class onecard(Frame):
         self.nextTurn()
 
 
+    def changeWant(self, s):
+        self.want = s
+        self.shapetext.set(f"change shape: {s}")
+        self.whatWant.destroy()
+        self.nextTurn()
+
+
+    def nextTurn(self):
+        self.order %= self.player_count
+        self.turn(self.people[self.order])
+
+
     def onecardShout(self):
         self.after_cancel(self.shout)
         self.onecard(self.people[0])
@@ -178,189 +354,14 @@ class onecard(Frame):
         if self.one_player != shout_player:
             self.draw(self.one_player.hand, self.one_player.is_computer)
             self.decknumber[self.one_player.name].set('2')
-    
-
-    def chiceCard(self, card, player):
-        self.alarmText.set('')
-        hand = player.hand
-        if card == None:
-            for _ in range(self.damage):
-                if not self.draw(hand, player.is_computer):
-                    break
-            self.damage = 1
-            self.damagetext.set('')
-            self.is_attack = False
-        else:
-            self.put.append(card)
-            hand.remove(card)
-
-            if self.is_attack_card(card):
-                if not self.is_attack:
-                    self.damage = self.get_damage(card)
-                    self.is_attack = True
-                else: self.damage += self.get_damage(card)
-                self.damagetext.set(f"damage: {self.damage}")
-            self.want = None
-            self.shapetext.set('')
-
-        if not player.is_computer:
-            for button in self.deckbutton:
-                self.deckbutton[button]["state"] = DISABLED
-            self.eatcard["state"] = DISABLED
-
-        n = len(hand)
-        self.decknumber[player.name].set(str(n))
-        self.putcard.set(self.put[-1])
-        if n == 0:
-            self.destroy()
-            winlabel = Label(self.master, text=f"{player.name} is winner!!!")
-            winlabel.pack()
-            return 
-        elif n == 1:
-            time = [randrange(100, 3000) for _ in range(self.player_count-2)]
-            if self.order != 0: time.insert(self.order-1, randrange(100, 1000))
-            self.one_player = player
-            self.onecardButton["state"] = NORMAL
-            self.shout = self.after(min(time), self.onecard, self.people[time.index(min(time))+1])
-        
-        self.KQJ7(card, player)
-
-
-    def turn(self, player):
-        self.orderText.set(f"{player.name}`s turn")
-
-        if not player.is_computer:
-            for card in self.deckbutton:
-                self.deckbutton[card]["state"] = NORMAL
-            self.eatcard["state"] = NORMAL
-
-        else:
-            available = []
-            for card in player.hand:
-                if self.is_available(card):
-                    available.append(card)
-
-            self.after(randrange(1000, 4000), self.chiceCard, choice(available) if available else None, player)
-
-
-    def checkCard(self, card):
-        if card == None or self.is_available(card):
-            if card != None:
-                self.deckbutton[card].destroy()
-                del self.deckbutton[card]
-            self.chiceCard(card, self.people[0])
-        else:
-            messagebox.showerror("Error", "낼 수 없는 카드입니다.")
-
-
-    def addMydeck(self, card):
-        self.deckbutton[card] = Button(self.frame3, text=f"{card}", overrelief="sunken",
-                                       command=lambda: self.checkCard(card))
-        self.deckbutton[card].pack(side="left")
-        if self.order != 0: self.deckbutton[card]["state"] = DISABLED
-
-
-    def startGame(self):
-        self.pack()
-
-        self.orderText = StringVar()
-        turnLabel = Label(self, textvariable=self.orderText, bg="green")
-        turnLabel.pack(fill='x')
-        self.alarmText = StringVar()
-        alarmText = Label(self, textvariable=self.alarmText)
-        alarmText.pack()
-
-        frame1 = Frame(self)
-        frame2 = Frame(self)
-        self.frame3 = Frame(self)
-        frame4 = Frame(self)
-        frame1.pack()
-        frame2.pack()
-        self.frame3.pack()
-        frame4.pack(fill='x')
-        
-        self.decknumber = {person.name: StringVar() for person in self.people}
-        for i, person in enumerate(self.people):
-            if i == 0: continue
-            name = Label(frame1, text=person.name)
-            self.decknumber[person.name].set(str(len(person.hand)))
-            deck = Label(frame1, textvariable=self.decknumber[person.name])
-            name.grid(row=0, column=i)
-            deck.grid(row=1, column=i)
-
-        self.putcard = StringVar()
-        self.putcard.set(self.put[-1])
-        putcardLabel = Label(frame2, textvariable=self.putcard)
-        putcardLabel.pack()
-
-        deckLabel = Label(self.frame3, text=f"{self.people[0].name}`s deck:")
-        deckLabel.pack(side="left")
-
-        self.deckbutton = {}
-        for card in self.people[0].hand:
-            self.addMydeck(card)
-        self.eatcard = Button(self.frame3, text="먹기", state="disabled", overrelief="sunken",
-                              command=lambda: self.checkCard(None))
-        self.eatcard.pack(side="right")
-
-        self.damagetext = StringVar()
-        damageLabel = Label(frame4, textvariable=self.damagetext, fg='red')
-        damageLabel.pack(side="left")
-    
-        self.shapetext = StringVar()
-        shapeLabel = Label(frame4, textvariable=self.shapetext)
-        shapeLabel.pack(side="left")
-
-        self.onecardButton = Button(frame4, text="ONECARD!!", state="disabled", overrelief="sunken",
-                                    command=self.onecardShout)
-        self.onecardButton.pack(side="right")
-
-        self.turn(self.people[self.order])
-
-
-    def numCom(self):
-        try:
-            if not self.nameEntry.get():
-                messagebox.showerror("Error", "이름을 입력해 주세요.")
-            com_count = int(self.numComEntry.get())
-            if com_count < 1 or com_count > 6:
-                messagebox.showerror("Error", "1~6 사이의 수를 입력해주세요.")
-            else:
-                game = onecard(window)
-                game.createPlayer(self.nameEntry.get(), com_count)
-                game.handOutCard()
-                self.setUp.destroy()
-                game.startGame()
-        except ValueError:
-            messagebox.showerror("Error", "숫자를 입력해 주세요.")
-
-
-    def setting(self):
-        self.setUp = Frame(self.master)
-        self.setUp.pack()
-
-        frame = Frame(self.setUp)
-        frame.pack()
-
-        nameLabel = Label(frame, text="이름:")
-        nameLabel.grid(row=1, column=0)
-        self.nameEntry = Entry(frame)
-        self.nameEntry.grid(row=1, column=1)
-
-        numComLabel = Label(frame, text="(6 이하) 컴퓨터 수:")
-        numComLabel.grid(row=2, column=0)
-        self.numComEntry = Entry(frame)
-        self.numComEntry.grid(row=2, column=1)
-
-        buttonEnter = Button(self.setUp, text="확인", command=self.numCom)
-        buttonEnter.pack()
 
 
 
-window = Tk()
-window.title("Onecard")
+if __name__ == "__main__":
+    window = Tk()
+    window.title("Onecard")
 
-game = onecard(window)
-game.setting()
+    game = onecard(window)
+    game.setting()
 
-window.mainloop()
+    window.mainloop()
